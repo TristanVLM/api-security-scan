@@ -46,12 +46,29 @@ class SQLiScanner(BaseScanner):
                 ]
             )
 
+        time_based_test = self._test_time_based_sqli()
+        if time_based_test["vulnerable"]:
+            return self._create_vulnerable_result(
+                details=f"Time-based SQL Injection detected: {time_based_test['database_type']}",
+                evidence=time_based_test,
+                severity=Severity.CRITICAL,
+                recommendations=[
+                    "Use parameterized queries exclusively",
+                    "Implement strict input validation",
+                    "Monitor for unusual response time patterns",
+                ]
+            )
+
         return TestResultCreate(
             test_name=TestType.SQLI,
             status=ScanStatus.SAFE,
             severity=Severity.INFO,
             details="No SQL Injection vulnerabilities detected",
-            evidence_json=error_based_test,
+            evidence_json={
+                "error_based_test": error_based_test,
+                "boolean_based_test": boolean_based_test,
+                "time_based_test": time_based_test
+            },
             recommendations_json=[
                 "Continue using parameterized queries",
                 "Regularly review and update security practices",
@@ -144,6 +161,63 @@ class SQLiScanner(BaseScanner):
                 "vulnerable": False,
                 "error": str(e),
                 "description": "Error testing boolean-based SQLi",
+            }
+
+    def _test_time_based_sqli(self, delay_seconds: int = 5) -> dict[str, Any]:
+        """Test for time-based SQL Injection vulnerabilities."""
+        try:
+            baseline_mean, baseline_stdev = self.get_baseline_timing("/")
+
+            threshold = baseline_mean + (3 * baseline_stdev)
+            expected_delay_time = baseline_mean + delay_seconds
+
+            all_time_payloads = SQLiPayloads.TIME_BASED_BLIND
+
+            delay_payloads = {
+                "mysql": [p for p in all_time_payloads if "SLEEP" in p],
+                "postgresql": [p for p in all_time_payloads if "pg_sleep" in p],
+                "mssql": [p for p in all_time_payloads if "WAITFOR" in p],
+            }
+
+            for db_type, payloads in delay_payloads.items():
+                for payload in payloads:
+                    delay_times = []
+
+                    for _ in range(3):  # Test each payload 3 times
+                        try:
+                            response = self.make_request("GET", f"/?id={payload}", timeout=delay_seconds + 10)
+                            elapsed = getattr(response, "request_time", 0.0)
+                            delay_times.append(elapsed)
+                        except Exception:
+                            delay_times.append(delay_seconds + 10)  # Assume max delay if request fails
+                        time.sleep(1) # Short pause between requests
+
+                    avg_delay = statistics.mean(delay_times)
+
+                    if avg_delay > expected_delay_time - 1:
+                        confidence = "HIGH" if avg_delay > expected_delay_time else "MEDIUM"
+
+                        return {
+                            "vulnerable": True,
+                            "database_type": db_type,
+                            "payload": payload,
+                            "baseline_time": f"{baseline_mean:.3f}s",
+                            "response_time": f"{avg_delay:.3f}s",
+                            "expected_delay_time": f"{expected_delay_time:.3f}s",
+                            "confidence": confidence,
+                            "individual_times": [f"{t:.3f}s" for t in delay_times]
+                        }
+            return {
+                "vulnerable": False,
+                "baseline_time": f"{baseline_mean:.3f}s",
+                "threshold": f"{threshold:.3f}s",
+                "description": "No time-based SQLi detected"
+            }
+        except Exception as e:
+            return {
+                "vulnerable": False,
+                "error": str(e),
+                "description": "Error testing time-based SQLi",
             }
 
 

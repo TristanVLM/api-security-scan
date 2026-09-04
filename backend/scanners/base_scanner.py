@@ -103,6 +103,19 @@ class BaseScanner(ABC):
                     raise
         return response
 
+    def get_baseline_timing(self, endpoint: str, samples: int | None = None) -> tuple[float, float]:
+        """Get baseline response time for an endpoint"""
+        if samples is None:
+            samples = settings.DEFAULT_BASELINE_SAMPLES
+
+        timings = []
+        for _ in range(samples):
+            response = self.make_request("GET", endpoint)
+            timings.append(getattr(response, "request_time", 0.0))
+            time.sleep(0.5)
+
+        return statistics.mean(timings), statistics.stdev(timings)
+
     @abstractmethod
     def scan(self) -> TestResultCreate:
         """Perform the scan and return a TestResultCreate object."""

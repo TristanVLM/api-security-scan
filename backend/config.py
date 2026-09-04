@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # Scanner request spacing and timing
     DEFAULT_JITTER_MS: int = 100
     DEFAULT_RETRY_WAIT_SECONDS: int = 60
+    DEFAULT_BASELINE_SAMPLES: int = 10
 
 
 
