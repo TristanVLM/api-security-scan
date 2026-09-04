@@ -33,6 +33,19 @@ class SQLiScanner(BaseScanner):
                 ]
             )
 
+        boolean_based_test = self._test_boolean_based_sqli()
+        if boolean_based_test["vulnerable"]:
+            return self._create_vulnerable_result(
+                details="Boolean-based SQL Injection detected",
+                evidence=boolean_based_test,
+                severity=Severity.CRITICAL,
+                recommendations=[
+                    "Use parameterized queries for all database operations",
+                    "Implement proper input validation",
+                    "Avoid exposing different responses for true/false conditions",
+                ]
+            )
+
         return TestResultCreate(
             test_name=TestType.SQLI,
             status=ScanStatus.SAFE,
@@ -75,6 +88,64 @@ class SQLiScanner(BaseScanner):
             "payload_tested": len(basic_payloads),
             "description": "No database error detected"
         }
+
+    def _test_boolean_based_sqli(self) -> dict[str, Any]:
+        """Test for boolean-based SQL Injection vulnerabilities."""
+        try:
+            baseline_response = self.make_request("GET", "/?id=1")
+            baseline_length = len(baseline_response.text)
+            baseline_status = baseline_response.status_code
+
+            if baseline_status != 200:
+                return {
+                    "vulnerable": False,
+                    "description": f"Baseline request failed",
+                    "baseline_status": baseline_status,
+                }
+
+            boolean_payloads = SQLiPayloads.BOOLEAN_BASED_BLIND
+
+            true_payloads  = [p for p in boolean_payloads if "AND '1'='1" in p or "AND 1=1" in p]
+            false_payloads = [p for p in boolean_payloads if "AND '1'='2" in p or "AND 1=2" in p or "AND 1=0" in p]
+
+            true_lengths  = []
+            for payload in true_payloads:
+                response = self.make_request("GET", f"/?id={payload}")
+                true_lengths.append(len(response.text))
+
+            false_lengths = []
+            for payload in false_payloads:
+                response = self.make_request("GET", f"/?id={payload}")
+                false_lengths.append(len(response.text))
+
+            # Calculate the average lengths for true and false payloads
+            avg_true  = statistics.mean(true_lengths) if true_lengths else 0
+            avg_false = statistics.mean(false_lengths) if false_lengths else 0
+
+            length_difference = abs(avg_true - avg_false)
+
+            # Significant difference in response lengths indicates a potential boolean-based SQLi vulnerability
+            if length_difference > 100 and avg_true != avg_false:
+                return {
+                    "vulnerable": True,
+                    "baseline_length": baseline_length,
+                    "true_condition_avg_length": avg_true,
+                    "false_condition_avg_length": avg_false,
+                    "length_difference": length_difference,
+                    "confidence": "HIGH" if length_difference > 500 else "MEDIUM",
+                }
+            return {
+                "vulnerable": False,
+                "description": "No boolean-based SQLi detected",
+                "length_difference": length_difference,
+            }
+        except Exception as e:
+            return {
+                "vulnerable": False,
+                "error": str(e),
+                "description": "Error testing boolean-based SQLi",
+            }
+
 
     def _create_vulnerable_result(
         self,
