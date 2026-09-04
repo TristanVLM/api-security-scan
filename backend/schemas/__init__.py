@@ -4,6 +4,10 @@ from .user_schemas import (
     UserResponse,
     TokenResponse,
 )
+from .test_result_schemas import (
+    TestResultCreate,
+    TestResultResponse,
+)
 
 __all__ = [
     # User schemas
@@ -11,4 +15,7 @@ __all__ = [
     "UserLogin",
     "UserResponse",
     "TokenResponse",
+    # Test result schemas
+    "TestResultCreate",
+    "TestResultResponse",
 ]

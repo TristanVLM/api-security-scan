@@ -34,6 +34,20 @@ class Settings(BaseSettings):
     PASSWORD_MAX_LENGTH: int = 100
     EMAIL_MAX_LENGTH: int = 255
 
+    # Default maximum requests for scans
+    DEFAULT_MAX_REQUESTS : int = 100
+    DEFAULT_TIMEOUT_SECONDS: int = 10
+    DEFAULT_RETRY_COUNT: int = 3
+
+    # Scanner timeout and connection limits
+    SCANNER_CONNECTION_TIMEOUT: int = 30
+
+    # Scanner rate limiting
+    SCANNER_RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # Scanner request spacing and timing
+    DEFAULT_JITTER_MS: int = 100
+    DEFAULT_RETRY_WAIT_SECONDS: int = 60
 
 
 
